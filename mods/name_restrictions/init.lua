@@ -17,6 +17,23 @@ temp = nil
 exemptions[minetest.setting_get("name")] = true
 exemptions["singleplayer"] = true
 
+
+local function player_exempted(name)
+	-- Allow specifically exempted players
+	if exemptions[name] then
+		return true
+	end
+
+	-- Allow players that already exist
+	local auth = minetest.get_auth_handler()
+	if auth.get_auth(name) then
+		return true
+	end
+
+	return false
+end
+
+
 ---------------------
 -- Simple matching --
 ---------------------
@@ -34,6 +51,9 @@ local disallowed = {
 }
 
 minetest.register_on_prejoinplayer(function(name, ip)
+	if player_exempted(name) then return end
+
+	-- Check for disallowed names
 	local lname = name:lower()
 	for re, reason in pairs(disallowed) do
 		if lname:find(re) then
@@ -48,6 +68,9 @@ end)
 ------------------------
 
 minetest.register_on_prejoinplayer(function(name, ip)
+	if player_exempted(name) then return end
+
+	-- Check for used names
 	local lname = name:lower()
 	for iname, data in pairs(minetest.auth_table) do
 		if iname:lower() == lname and iname ~= name then
@@ -85,7 +108,7 @@ minetest.register_chatcommand("choosecase", {
 -- Prevents names that are too similar to another player's name.
 
 local similar_chars = {
-	-- Only A-Z, a-z, 1-9, dash, and underscore are allowed in playernames
+	-- Only A-Z, a-z, 1-9, dash, and underscore are allowed in player names
 	"A4",
 	"B8",
 	"COco0",
@@ -122,10 +145,16 @@ all_chars = all_chars .. "]"
 
 
 minetest.register_on_prejoinplayer(function(name, ip)
-	if exemptions[name] then return end
+	if player_exempted(name) then return end
+
+	-- String off dashes and underscores from the start and end of the name.
+	local stripped_name = name:match("^[_-]*(.-)[_-]*$")
+	if not stripped_name or stripped_name == "" then
+		return "Your name is composed solely of whitespace-like characters."
+	end
 
 	-- Generate a regular expression to match all similar names
-	local re = name:gsub(all_chars, char_map)
+	local re = stripped_name:gsub(all_chars, char_map)
 	re = "^[_-]*" .. re .. "[_-]*$"
 
 	for authName, _ in pairs(minetest.auth_table) do
@@ -144,7 +173,7 @@ end)
 local min_name_len = tonumber(minetest.setting_get("name_restrictions.minimum_name_length")) or 3
 
 minetest.register_on_prejoinplayer(function(name, ip)
-	if exemptions[name] then return end
+	if player_exempted(name) then return end
 
 	if #name < min_name_len then
 		return "Your player name is too short, please try a longer name."
@@ -207,7 +236,7 @@ end
 local pronounceability = tonumber(minetest.setting_get("name_restrictions.pronounceability"))
 if pronounceability then
 	minetest.register_on_prejoinplayer(function(name, ip)
-		if exemptions[name] then return end
+		if player_exempted(name) then return end
 
 		if not pronounceable(pronounceability, name) then
 			return "Your player name does not seem to be pronounceable."
